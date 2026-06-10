@@ -14,7 +14,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 # wry 0.47 may crash on android, see https://github.com/EasyTier/EasyTier/issues/527
-tauri = { version = "2.7.0", features = [
+tauri = { version = "=2.10.3", features = [
     "tray-icon",
     "image-png",
     "image-ico",

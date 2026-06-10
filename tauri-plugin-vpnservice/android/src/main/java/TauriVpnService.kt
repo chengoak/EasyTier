@@ -1,10 +1,15 @@
 package com.plugin.vpnservice
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Bundle
+import androidx.core.app.NotificationCompat
 import java.net.InetAddress
 import java.util.Arrays
 
@@ -23,6 +28,9 @@ class TauriVpnService : VpnService() {
         const val DNS = "DNS"
         const val DISALLOWED_APPLICATIONS = "DISALLOWED_APPLICATIONS"
         const val MTU = "MTU"
+
+        const val CHANNEL_ID = "easytier_vpn_channel"
+        const val NOTIFICATION_ID = 1356
     }
 
     private lateinit var vpnInterface: ParcelFileDescriptor
@@ -34,6 +42,8 @@ class TauriVpnService : VpnService() {
         routes = args?.getStringArray(ROUTES) ?: emptyArray()
         dns = args?.getString(DNS)
 
+        startForegroundWithNotification()
+
         vpnInterface = createVpnInterface(args)
         println("vpn created ${vpnInterface.fd}")
 
@@ -42,6 +52,40 @@ class TauriVpnService : VpnService() {
         triggerCallback("vpn_service_start", event_data)
 
         return START_STICKY
+    }
+
+    private fun startForegroundWithNotification() {
+        createNotificationChannel()
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("EasyTier VPN")
+            .setContentText("VPN is connected")
+            .setSmallIcon(R.drawable.ic_stat_easytier)
+            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "EasyTier VPN",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            channel.setShowBadge(false)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(channel)
+        }
     }
 
     override fun onCreate() {
