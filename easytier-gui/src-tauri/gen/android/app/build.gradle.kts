@@ -103,6 +103,10 @@ rust {
     rootDirRel = "../../../"
 }
 
+tasks.matching { it.name.startsWith("rustBuild") }.configureEach {
+    enabled = false
+}
+
 dependencies {
     implementation("androidx.webkit:webkit:1.6.1")
     implementation("androidx.appcompat:appcompat:1.6.1")

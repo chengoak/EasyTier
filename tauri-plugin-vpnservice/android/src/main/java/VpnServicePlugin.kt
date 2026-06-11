@@ -3,7 +3,10 @@ package com.plugin.vpnservice
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import androidx.activity.result.ActivityResult
+import androidx.core.app.ActivityCompat
+import android.content.pm.PackageManager
 import app.tauri.annotation.Command
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.InvokeArg
@@ -76,6 +79,18 @@ class VpnServicePlugin(private val activity: Activity) : Plugin(activity) {
         activity.runOnUiThread {
             println("start vpn in plugin, args: $args")
 
+            // Request notification permission on Android 13+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ActivityCompat.checkSelfPermission(activity, android.Manifest.permission.POST_NOTIFICATIONS) 
+                    != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                        1001
+                    )
+                }
+            }
+
             TauriVpnService.self?.onRevoke()
 
             val it = VpnService.prepare(activity)
@@ -90,7 +105,11 @@ class VpnServicePlugin(private val activity: Activity) : Plugin(activity) {
                 intent.putExtra(TauriVpnService.DISALLOWED_APPLICATIONS, args.disallowedApplications)
                 intent.putExtra(TauriVpnService.MTU, args.mtu)
 
-                activity.startService(intent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    activity.startForegroundService(intent)
+                } else {
+                    activity.startService(intent)
+                }
             }
             invoke.resolve(ret)
         }

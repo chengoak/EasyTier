@@ -10,8 +10,6 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
-import java.net.InetAddress
-import java.util.Arrays
 
 import app.tauri.plugin.JSObject
 
@@ -35,35 +33,63 @@ class TauriVpnService : VpnService() {
 
     private lateinit var vpnInterface: ParcelFileDescriptor
 
+    override fun onCreate() {
+        super.onCreate()
+        self = this
+        println("vpn on create")
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         println("vpn on start command ${intent?.getExtras()} $intent")
+        
+        // 首先显示通知，确保服务成为前台服务
+        try {
+            startForegroundWithNotification()
+            println("vpn startForeground succeeded")
+        } catch (e: Exception) {
+            println("vpn startForeground failed: ${e.message}")
+            e.printStackTrace()
+            // 如果 startForeground 失败，停止服务
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        
         var args = intent?.getExtras()
         ipv4Addr = args?.getString(IPV4_ADDR)
         routes = args?.getStringArray(ROUTES) ?: emptyArray()
         dns = args?.getString(DNS)
 
-        startForegroundWithNotification()
+        try {
+            vpnInterface = createVpnInterface(args)
+            println("vpn created ${vpnInterface.fd}")
 
-        vpnInterface = createVpnInterface(args)
-        println("vpn created ${vpnInterface.fd}")
-
-        var event_data = JSObject()
-        event_data.put("fd", vpnInterface.fd)
-        triggerCallback("vpn_service_start", event_data)
+            var event_data = JSObject()
+            event_data.put("fd", vpnInterface.fd)
+            triggerCallback("vpn_service_start", event_data)
+        } catch (e: Exception) {
+            println("vpn createVpnInterface failed: ${e.message}")
+            e.printStackTrace()
+            // 即使 VPN 创建失败，也保持前台服务运行
+            // 只是不发送启动事件
+        }
 
         return START_STICKY
     }
 
     private fun startForegroundWithNotification() {
+        println("vpn creating notification channel")
         createNotificationChannel()
+        
+        println("vpn building notification")
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("EasyTier VPN")
             .setContentText("VPN is connected")
-            .setSmallIcon(R.drawable.ic_stat_easytier)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
 
+        println("vpn calling startForeground")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -73,25 +99,26 @@ class TauriVpnService : VpnService() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        println("vpn startForeground called")
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "EasyTier VPN",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            channel.setShowBadge(false)
-            val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+            try {
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    "EasyTier VPN",
+                    NotificationManager.IMPORTANCE_LOW
+                )
+                channel.setShowBadge(false)
+                val manager = getSystemService(NotificationManager::class.java)
+                manager?.createNotificationChannel(channel)
+                println("vpn notification channel created")
+            } catch (e: Exception) {
+                println("vpn failed to create notification channel: ${e.message}")
+                e.printStackTrace()
+            }
         }
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        self = this
-        println("vpn on create")
     }
 
     override fun onDestroy() {
